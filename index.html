@@ -222,6 +222,43 @@
     color: color-mix(in srgb, var(--good) 75%, var(--ink));
   }
   .btn-danger { background: var(--miss); color: #fff; }
+  header { position: relative; }
+  .btn-info {
+    position: absolute; top: 4px; left: 0;
+    display: inline-flex; align-items: center; gap: 5px; font-family: inherit; font-weight: 800; font-size: 12.5px;
+    text-decoration: none; border-radius: 999px; padding: 7px 13px; cursor: pointer;
+    background: #1BE7C9; border: none; color: #000;
+    box-shadow: 0 0 12px 2px rgba(27,231,201,.65), 0 4px 12px rgba(27,231,201,.35);
+    animation: infoPulse 2.2s ease-in-out infinite;
+    transition: transform .1s ease;
+  }
+  .btn-info .btn-info-icon { font-size: 14px; }
+  @keyframes infoPulse {
+    0%, 100% { box-shadow: 0 0 12px 2px rgba(27,231,201,.65), 0 4px 12px rgba(27,231,201,.35); }
+    50% { box-shadow: 0 0 18px 5px rgba(27,231,201,.85), 0 4px 12px rgba(27,231,201,.35); }
+  }
+  .btn-info:hover { transform: scale(1.05); }
+  .btn-info:active { transform: scale(.96); }
+  .btn-info:focus-visible { outline: 3px solid var(--accent-teal); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { .btn-info { animation: none; } }
+  @media (max-width: 700px) { .btn-info { position: static; margin-bottom: 10px; } }
+  .video-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(15,12,25,.8); z-index: 200;
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .video-modal-backdrop.hidden { display: none; }
+  .video-modal-box {
+    position: relative; width: 100%; max-width: 720px; background: #000;
+    border-radius: var(--radius-lg); overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  }
+  .video-modal-box video { display: block; width: 100%; max-height: 80vh; background: #000; }
+  .video-modal-close {
+    position: absolute; top: 10px; left: 10px; width: 38px; height: 38px; border-radius: 50%;
+    border: none; background: rgba(255,255,255,.92); color: #241F3D; font-size: 18px; font-weight: 800;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 2;
+  }
+  .video-modal-close:active { transform: scale(.94); }
+  @media (max-width: 480px) { .video-modal-box { max-width: 100%; } }
   .btn:disabled { opacity: .45; cursor: not-allowed; }
 
   .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -324,6 +361,7 @@
 
 <div class="app">
   <header>
+    <button class="btn-info" id="btnInfo" type="button" title="סרטון הדרכה קצר"><span class="btn-info-icon">ℹ️</span> Info</button>
     <span class="eyebrow">שיטת התווים המחוברים</span>
     <h1 class="title">מסלול הצלילים — עם המשפחה של סול</h1>
     <p class="subtitle">
@@ -391,6 +429,14 @@
         <div class="piano" id="keyboardRow"><div class="piano-blacks" id="pianoBlacks"></div></div>
       </section>
     </main>
+  </div>
+  <div class="video-modal-backdrop hidden" id="videoModalBackdrop">
+    <div class="video-modal-box">
+      <button class="video-modal-close" id="videoModalClose" type="button" title="סגירה">✕</button>
+      <video id="introVideo" controls playsinline preload="none">
+        <source src="media/info-video.mp4" type="video/mp4">
+      </video>
+    </div>
   </div>
 </div>
 
@@ -470,6 +516,7 @@
   ["castStrip","castCaption","staffViewport","noteRow","playheadEl","lineDots","hudSong","hudProgress","hudMistakes",
    "countdownOverlay","countdownNum","finaleOverlay","finaleStars","finaleStats","btnPlayAgain","btnCloseFinale",
    "btnPlay","btnListen","btnPause","btnRestart","keyboardRow","pianoBlacks",
+   "btnInfo","videoModalBackdrop","videoModalClose","introVideo",
    "songBankToggle","songBankToggleLabel","songBankScroll","songBankList","legendList","stagePanel"
   ].forEach(id => els[id] = document.getElementById(id));
 
@@ -991,6 +1038,19 @@
       setTimeout(() => piece.remove(), 3000);
     }
   }
+
+  function openVideoModal() {
+    els.videoModalBackdrop.classList.remove("hidden");
+    els.introVideo.currentTime = 0;
+    els.introVideo.play().catch(() => {});
+  }
+  function closeVideoModal() {
+    els.introVideo.pause();
+    els.videoModalBackdrop.classList.add("hidden");
+  }
+  els.btnInfo.addEventListener("click", openVideoModal);
+  els.videoModalClose.addEventListener("click", closeVideoModal);
+  els.videoModalBackdrop.addEventListener("click", (e) => { if (e.target === els.videoModalBackdrop) closeVideoModal(); });
 
   els.btnPlay.addEventListener("click", startPlayback);
   els.btnListen.addEventListener("click", toggleListen);
