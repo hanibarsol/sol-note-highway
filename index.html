@@ -343,19 +343,19 @@
     <main class="stage-col">
       <div class="panel" style="padding:12px 18px">
         <button type="button" class="song-bank-toggle" id="songBankToggle">
-          <span id="songBankToggleLabel">בחרי שיר מהבנק</span>
+          <span id="songBankToggleLabel">בחרו שיר מהבנק</span>
           <span class="chev">▾</span>
         </button>
         <div class="song-bank-scroll" id="songBankScroll"><div id="songBankList"></div></div>
       </div>
       <div class="panel cast-panel">
         <div class="cast" id="castStrip"></div>
-        <div class="cast-caption" id="castCaption">הצמידי דמות כדי לקרוא עליה →</div>
+        <div class="cast-caption" id="castCaption">הצמידו דמות כדי לקרוא עליה →</div>
       </div>
 
       <section class="panel stage-and-piano" id="stagePanel">
         <div class="stage-hud">
-          <div class="hud-left" id="hudSong">בחרי שיר כדי להתחיל</div>
+          <div class="hud-left" id="hudSong">בחרו שיר כדי להתחיל</div>
           <div class="hud-right">
             <span>התקדמות <b id="hudProgress">0/0</b></span>
             <span>טעויות <b id="hudMistakes">0</b></span>
@@ -809,7 +809,7 @@
     els.lineDots.innerHTML = "";
     els.keyboardRow.querySelectorAll(".piano-key").forEach(k => k.classList.remove("due"));
     els.pianoBlacks.querySelectorAll(".black-key").forEach(bk => bk.classList.remove("due"));
-    showPlaceholder('בחרי שיר מהבנק ולחצי "נגן" כדי להתחיל');
+    showPlaceholder('בחרו שיר מהבנק ולחצו "נגן" כדי להתחיל');
   }
   function togglePause() {
     if (!playing) return;
@@ -1002,6 +1002,6 @@
   new ResizeObserver(() => handleResize()).observe(els.stagePanel);
   window.addEventListener("resize", handleResize);
   renderStaffLines();
-  showPlaceholder('בחרי שיר מהבנק ולחצי "נגן" כדי להתחיל');
+  showPlaceholder('בחרו שיר מהבנק ולחצו "נגן" כדי להתחיל');
 })();
 </script>
