@@ -224,7 +224,7 @@
   .btn-danger { background: var(--miss); color: #fff; }
   header { position: relative; }
   .btn-info {
-    position: absolute; top: 42px; left: 0;
+    position: absolute; top: 14px; right: 0;
     display: inline-flex; align-items: center; gap: 5px; font-family: inherit; font-weight: 800; font-size: 12.5px;
     text-decoration: none; border-radius: 999px; padding: 7px 13px; cursor: pointer;
     background: #1BE7C9; border: none; color: #000;
@@ -240,17 +240,27 @@
   .btn-info:hover { transform: scale(1.05); }
   .btn-info:active { transform: scale(.96); }
   .btn-info:focus-visible { outline: 3px solid var(--accent-teal); outline-offset: 2px; }
-.btn-home {
-    position: absolute; top: 4px; left: 8px;
+/* ---------- Sol home button (unified turquoise) ---------- */
+  .btn-home {
+    position: fixed; top: 12px; left: 12px;
     display: inline-flex; align-items: center; justify-content: center;
-    width: 30px; height: 30px; border-radius: 50%;
-    background: var(--panel); border: 2px solid var(--accent-teal); color: var(--ink);
-    box-shadow: var(--shadow); cursor: pointer; text-decoration: none;
-    transition: transform .1s ease; z-index: 5;
+    width: 52px; height: 52px; border-radius: 50%;
+    background: #17A79B; border: none; color: #FFFFFF;
+    box-shadow: 0 4px 14px rgba(18, 48, 44, 0.35); cursor: pointer; text-decoration: none;
+    transition: transform 0.15s ease, box-shadow 0.15s ease; z-index: 101;
   }
-  .btn-home:hover { transform: scale(1.08); }
-  .btn-home:active { transform: scale(.94); }
-  .btn-home:focus-visible { outline: 3px solid var(--accent-teal); outline-offset: 2px; }
+  .btn-home:hover { transform: translateY(-2px) scale(1.05); box-shadow: 0 8px 18px rgba(18, 48, 44, 0.45); }
+  .btn-home:active { transform: scale(.96); }
+  .btn-home:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 3px; }
+  .btn-home svg { width: 26px; height: 26px; }
+  @media (max-width: 640px) {
+    .btn-home { width: 44px; height: 44px; top: 8px; left: 8px; }
+    .btn-home svg { width: 22px; height: 22px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .btn-home { transition: none; }
+    .btn-home:hover { transform: none; }
+  }
     @media (prefers-reduced-motion: reduce) { .btn-info { animation: none; } }
   @media (max-width: 700px) { .btn-info { position: static; margin-bottom: 10px; } }
   .video-modal-backdrop {
@@ -372,8 +382,7 @@
 
 <video id="charIntroPlayer" style="display:none" playsinline webkit-playsinline></video>
 <div class="app">
-  <header>
-    <a class="btn-home" id="btnHome" href="https://portal.smoove.io/fgb81bodb1tbsdmnmfn7/Category?category=qqb&c=he-IL" title="חזרה לעולמות של סול" aria-label="חזרה לעולמות של סול"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M4 10.5L12 4l8 6.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 9.5V19a1 1 0 0 0 1 1h3.5v-5a1.5 1.5 0 0 1 1.5-1.5a1.5 1.5 0 0 1 1.5 1.5v5H17a1 1 0 0 0 1-1V9.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+  <header>    <a class="btn-home" id="btnHome" href="https://portal.smoove.io/gsbmtbnbbf1yd87kbofd1/Category?category=qqb" target="_top" title="חזרה למסך הבית" aria-label="חזרה למסך הבית"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10"/></svg></a>
     <button class="btn-info" id="btnInfo" type="button" title="סרטון הדרכה קצר"><span class="btn-info-icon">ℹ️</span> Info</button>
     <span class="eyebrow">שיטת התווים המחוברים</span>
     <h1 class="title">מסלול הצלילים — עם המשפחה של סול</h1>
