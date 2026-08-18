@@ -223,23 +223,30 @@
   }
   .btn-danger { background: var(--miss); color: #fff; }
   header { position: relative; }
+  /* Info mirrors the home button: same circle, same size, opposite corner.
+     Fixed to the viewport (not to .app) so the pair stays symmetrical on
+     every screen width. */
   .btn-info {
-    position: absolute; top: 14px; right: 0;
-    display: inline-flex; align-items: center; gap: 5px; font-family: inherit; font-weight: 800; font-size: 12.5px;
-    text-decoration: none; border-radius: 999px; padding: 7px 13px; cursor: pointer;
-    background: #1BE7C9; border: none; color: #000;
-    box-shadow: 0 0 12px 2px rgba(27,231,201,.65), 0 4px 12px rgba(27,231,201,.35);
-    animation: infoPulse 2.2s ease-in-out infinite;
-    transition: transform .1s ease;
+    position: fixed; top: 12px; right: 12px; left: auto;
+    width: 52px; height: 52px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0; cursor: pointer; z-index: 101;
+    background: #17A79B; border: none; color: #FFFFFF;
+    box-shadow: 0 4px 14px rgba(18, 48, 44, 0.35);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
   }
-  .btn-info .btn-info-icon { font-size: 14px; }
-  @keyframes infoPulse {
-    0%, 100% { box-shadow: 0 0 12px 2px rgba(27,231,201,.65), 0 4px 12px rgba(27,231,201,.35); }
-    50% { box-shadow: 0 0 18px 5px rgba(27,231,201,.85), 0 4px 12px rgba(27,231,201,.35); }
-  }
-  .btn-info:hover { transform: scale(1.05); }
+  .btn-info svg { width: 26px; height: 26px; }
+  .btn-info:hover { transform: translateY(-2px) scale(1.05); box-shadow: 0 8px 18px rgba(18, 48, 44, 0.45); }
   .btn-info:active { transform: scale(.96); }
-  .btn-info:focus-visible { outline: 3px solid var(--accent-teal); outline-offset: 2px; }
+  .btn-info:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 3px; }
+  @media (max-width: 640px) {
+    .btn-info { width: 44px; height: 44px; top: 8px; right: 8px; }
+    .btn-info svg { width: 22px; height: 22px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .btn-info { transition: none; }
+    .btn-info:hover { transform: none; }
+  }
 /* ---------- Sol home button (unified turquoise) ---------- */
   .btn-home {
     position: fixed; top: 12px; left: 12px;
@@ -261,8 +268,6 @@
     .btn-home { transition: none; }
     .btn-home:hover { transform: none; }
   }
-    @media (prefers-reduced-motion: reduce) { .btn-info { animation: none; } }
-  @media (max-width: 700px) { .btn-info { position: static; margin-bottom: 10px; } }
   .video-modal-backdrop {
     position: fixed; inset: 0; background: rgba(15,12,25,.8); z-index: 200;
     display: flex; align-items: center; justify-content: center; padding: 16px;
@@ -378,12 +383,16 @@
     .pk-label { font-size: 9px; }
     .piano-key { padding: 0 2px 6px; gap: 3px; }
   }
+
+  /* The Info button no longer sits in the flow, so the page needs its own
+     top room to clear the two corner buttons on a phone. */
+  @media (max-width: 640px) { .app { padding-top: 64px; } }
 </style>
 
 <video id="charIntroPlayer" style="display:none" playsinline webkit-playsinline></video>
 <div class="app">
   <header>    <a class="btn-home" id="btnHome" href="https://portal.smoove.io/gsbmtbnbbf1yd87kbofd1/Category?category=qqb" target="_top" title="חזרה למסך הבית" aria-label="חזרה למסך הבית"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10"/></svg></a>
-    <button class="btn-info" id="btnInfo" type="button" title="סרטון הדרכה קצר"><span class="btn-info-icon">ℹ️</span> Info</button>
+    <button class="btn-info" id="btnInfo" type="button" title="סרטון הדרכה קצר" aria-label="סרטון הדרכה קצר"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="7.2" r="1.15" fill="currentColor" stroke="none"/><path d="M12 11v6"/></svg></button>
     <span class="eyebrow">שיטת התווים המחוברים</span>
     <h1 class="title">מסלול הצלילים — עם המשפחה של סול</h1>
     <p class="subtitle">
