@@ -180,6 +180,16 @@
     content: ""; position: absolute; top: 50%; right: -12px; left: -12px; height: 1px;
     background: var(--staff-line); transform: translateY(-.5px);
   }
+  .note-chip .chip-water { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+  .note-chip img { position: relative; z-index: 1; }
+  .note-chip.tap { width: 38px; height: 38px; margin: -19px 0 0 -19px; }
+  .note-chip.tap .chip-label { font-size: 10.5px; margin-top: 3px; }
+  .rhythm-lane { position: absolute; top: 0; right: 0; left: 0; height: 86px; pointer-events: none; z-index: 1; }
+  .rhythm-dot { position: absolute; transform: translate(-50%, -50%); pointer-events: none; transition: opacity .2s ease; }
+  .rhythm-dot.sleep { opacity: .36; }
+  .rhythm-dot.done { opacity: .5; }
+  .rhythm-dot.current { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent-gold) 60%, transparent)); }
+  .rhythm-stem { position: absolute; width: 1px; background: var(--staff-line); opacity: .4; transform: translateX(-50%); pointer-events: none; }
   .playhead {
     position: absolute; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; left: 0;
     background: var(--accent-gold); box-shadow: 0 0 12px color-mix(in srgb, var(--accent-gold) 70%, transparent);
@@ -431,6 +441,7 @@
           </div>
         </div>
         <div class="staff-viewport" id="staffViewport">
+          <div class="rhythm-lane" id="rhythmLane"></div>
           <div class="note-row" id="noteRow"></div>
           <div class="playhead" id="playheadEl"></div>
         </div>
@@ -548,7 +559,7 @@
    "countdownOverlay","countdownNum","finaleOverlay","finaleStars","finaleStats","btnPlayAgain","btnCloseFinale",
    "btnPlay","btnListen","btnPause","btnRestart","keyboardRow","pianoBlacks",
    "btnInfo","videoModalBackdrop","videoModalClose","introVideo",
-   "songBankToggle","songBankToggleLabel","songBankScroll","songBankList","legendList","stagePanel","charIntroPlayer"
+   "songBankToggle","songBankToggleLabel","songBankScroll","songBankList","legendList","stagePanel","charIntroPlayer","rhythmLane"
   ].forEach(id => els[id] = document.getElementById(id));
 
   const AUDIO_SRC = {
@@ -593,7 +604,7 @@
     k.className = "piano-key"; k.type = "button"; k.dataset.note = key;
     k.style.setProperty("--ring", ringVar(key));
     k.innerHTML = '<span class="pk-avatar"><img src="' + IMG_SRC[key] + '" alt=""></span><span class="pk-label">' + NOTES[key].name + "</span>";
-    k.addEventListener("pointerdown", (e) => { e.preventDefault(); handleNoteInput(key, "keys"); });
+    k.addEventListener("pointerdown", (e) => { e.preventDefault(); noteDown(key, "keys"); });
     els.keyboardRow.appendChild(k);
   });
 
@@ -618,7 +629,7 @@
         bk.classList.remove("pressed"); void bk.offsetWidth; bk.classList.add("pressed");
         setTimeout(() => bk.classList.remove("pressed"), 150);
         if (playing && !paused) {
-          handleNoteInput(note, "blackkey", null, true);
+          noteDown(note, "blackkey", null, true);
         } else {
           playPianoNote(noteFreq(note, 0, true));
         }
@@ -673,6 +684,11 @@
   const PAD_LEFT = 44, PAD_RIGHT = 44;
   const CHIP_DIAMETER = 56;
   const CHIP_MIN_GAP = 8;
+  const CHIP_TAP_DIAMETER = 38;
+  // a note shorter than this cannot be held on purpose by a small child - it is a touch
+  const TAP_MS = 400;
+  // holding this share of the note counts as holding it all the way
+  const HOLD_TOL = 0.90;
 
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -685,15 +701,22 @@
   let lineTransitionPending = false;
   const chipRefs = new Map();
   const sharpRefs = new Map();
+  const laneRefs = new Map();
 
   function buildTimeline(song) {
-    return song.notes.map(([note, beats, oct, sharp]) => ({ note, beats, oct: oct || 0, sharp: !!sharp, done: false, fracInLine: 0 }));
+    const beatMs = 60000 / song.bpm;
+    return song.notes.map(([note, beats, oct, sharp]) => {
+      const ms = beats * beatMs;
+      return { note, beats, ms, tap: ms < TAP_MS, oct: oct || 0, sharp: !!sharp, done: false, fracInLine: 0 };
+    });
   }
+  function chipDia(n) { return n.tap ? CHIP_TAP_DIAMETER : CHIP_DIAMETER; }
+  function laneDia(n) { return Math.round(Math.max(14, Math.min(40, 14 + (n.ms / 1000) * 22))); }
 
   function buildLines(tl) {
     const result = [];
     const usableWidth = usableWidthPx();
-    const minSpacing = CHIP_DIAMETER + CHIP_MIN_GAP;
+    const minSpacing = CHIP_TAP_DIAMETER + CHIP_MIN_GAP;
     const maxNotesPerLine = Math.max(1, Math.floor(usableWidth / minSpacing));
     let i = 0;
     while (i < tl.length) {
@@ -708,9 +731,12 @@
         const total = current.reduce((s, m) => s + m.beats, 0);
         let acc = 0;
         const fracs = current.map(m => { const f = (acc + m.beats / 2) / total; acc += m.beats; return f; });
-        let minGap = Infinity;
-        for (let k = 1; k < fracs.length; k++) minGap = Math.min(minGap, (fracs[k] - fracs[k - 1]) * usableWidth);
-        if (minGap >= minSpacing) break;
+        let fits = true;
+        for (let k = 1; k < fracs.length; k++) {
+          const need = (chipDia(current[k - 1]) + chipDia(current[k])) / 2 + CHIP_MIN_GAP;
+          if ((fracs[k] - fracs[k - 1]) * usableWidth < need) { fits = false; break; }
+        }
+        if (fits) break;
         current.pop();
       }
       const total = current.reduce((s, m) => s + m.beats, 0);
@@ -743,11 +769,48 @@
     });
   }
 
+  const WAVE = "M-100,0 q25,-6 50,0 t50,0 t50,0 t50,0 t50,0 t50,0 V115 H-100 Z";
+  let waterUid = 0;
+  function waterLayer(n) {
+    return '<span class="chip-water"><svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' +
+      '<path class="wv" fill="' + ringVar(n.note) + '" fill-opacity=".78" d="' + WAVE + '" transform="translate(0,100)"></path></svg></span>';
+  }
+  function makeLaneDot(n) {
+    const d = laneDia(n), id = "rw" + (++waterUid);
+    const el = document.createElement("div");
+    el.className = "rhythm-dot";
+    el.style.width = d + "px"; el.style.height = d + "px";
+    el.innerHTML = '<svg width="' + d + '" height="' + d + '" viewBox="0 0 100 100" aria-hidden="true">' +
+      '<defs><clipPath id="' + id + '"><circle cx="50" cy="50" r="46"/></clipPath></defs>' +
+      '<circle cx="50" cy="50" r="46" fill="var(--panel)" stroke="' + ringVar(n.note) + '" stroke-width="7"/>' +
+      '<g clip-path="url(#' + id + ')"><path class="wv" fill="' + ringVar(n.note) + '" fill-opacity=".78" d="' + WAVE +
+      '" transform="translate(0,100)"></path></g></svg>';
+    return el;
+  }
+  function setWater(el, p) {
+    if (!el) return;
+    const wv = el.querySelector(".wv");
+    if (wv) wv.setAttribute("transform", "translate(" + (Math.sin(Date.now() / 240) * 6) + "," + ((1 - p) * 100) + ")");
+  }
+  function paintFill(n) {
+    const p = n.done ? 1 : (n.fill || 0);
+    setWater(chipRefs.get(n), p);
+    setWater(laneRefs.get(n), p);
+  }
+
   function applyNoteClass(chip, n) {
+    const isCurrent = timeline[expectedIndex] === n;
     chip.classList.toggle("done", n.done);
-    chip.classList.toggle("current", timeline[expectedIndex] === n);
+    chip.classList.toggle("current", isCurrent);
     const badge = sharpRefs.get(n);
     if (badge) badge.classList.toggle("done", n.done);
+    const dot = laneRefs.get(n);
+    if (dot) {
+      dot.classList.toggle("done", n.done);
+      dot.classList.toggle("current", isCurrent);
+      dot.classList.toggle("sleep", !n.done && !isCurrent);
+    }
+    paintFill(n);
   }
 
   function showPlaceholder(text) {
@@ -761,8 +824,10 @@
 
   function renderActiveLine() {
     els.noteRow.innerHTML = "";
+    els.rhythmLane.innerHTML = "";
     chipRefs.clear();
     sharpRefs.clear();
+    laneRefs.clear();
     const line = lines[activeLineIndex];
     if (!line) return;
     const usableWidth = usableWidthPx();
@@ -771,14 +836,27 @@
       const y = noteYFor(NOTES[n.note].step);
       const chip = document.createElement("button");
       chip.type = "button";
-      chip.className = "note-chip" + (NOTES[n.note].step <= -2 ? " ledger" : "");
+      chip.className = "note-chip" + (n.tap ? " tap" : "") + (NOTES[n.note].step <= -2 ? " ledger" : "");
       chip.style.setProperty("--ring", ringVar(n.note));
       chip.style.left = x + "px"; chip.style.top = y + "px";
-      chip.innerHTML = '<img src="' + IMG_SRC[n.note] + '" alt=""><span class="chip-label">' + NOTES[n.note].name + "</span>";
-      chip.addEventListener("pointerdown", (e) => { e.preventDefault(); handleNoteInput(n.note, "chip", n); });
+      chip.innerHTML = waterLayer(n) + '<img src="' + IMG_SRC[n.note] + '" alt=""><span class="chip-label">' + NOTES[n.note].name + "</span>";
+      chip.addEventListener("pointerdown", (e) => { e.preventDefault(); noteDown(n.note, "chip", n); });
       applyNoteClass(chip, n);
       els.noteRow.appendChild(chip);
       chipRefs.set(n, chip);
+
+      const dot = makeLaneDot(n);
+      const dotDia = laneDia(n);
+      dot.style.left = x + "px"; dot.style.top = "40px";
+      els.rhythmLane.appendChild(dot);
+      laneRefs.set(n, dot);
+      const stem = document.createElement("div");
+      stem.className = "rhythm-stem";
+      stem.style.left = x + "px";
+      stem.style.top = (40 + dotDia / 2 + 3) + "px";
+      stem.style.height = "14px";
+      els.rhythmLane.appendChild(stem);
+      applyNoteClass(chip, n);
       if (n.sharp) {
         const badge = document.createElement("div");
         badge.className = "sharp-badge";
@@ -889,7 +967,10 @@
     }, 600);
   }
   function stopPlayback() {
+    cancelHold();
     playing = false; paused = false; activeLineIndex = -1; expectedIndex = -1;
+    els.rhythmLane.innerHTML = "";
+    laneRefs.clear();
     els.btnPlay.disabled = !selectedSongId; els.btnListen.disabled = !selectedSongId; els.btnPause.disabled = true; els.btnRestart.disabled = true;
     els.btnPause.textContent = "⏸ השהיה";
     els.lineDots.innerHTML = "";
@@ -899,6 +980,7 @@
   }
   function togglePause() {
     if (!playing) return;
+    cancelHold();
     paused = !paused;
     els.btnPause.textContent = paused ? "▶ המשך" : "⏸ השהיה";
   }
@@ -925,10 +1007,16 @@
     chip.classList.remove("wrong-flash"); void chip.offsetWidth; chip.classList.add("wrong-flash");
   }
 
-  function handleNoteInput(noteKey, source, chipNoteRef, sharpKey) {
-    const keyEl = sharpKey
+  let hold = null;
+
+  function keyElFor(noteKey, sharpKey) {
+    return sharpKey
       ? els.pianoBlacks.querySelector('[data-note="' + noteKey + '"]')
       : els.keyboardRow.querySelector('.piano-key[data-note="' + noteKey + '"]');
+  }
+
+  function noteDown(noteKey, source, chipNoteRef, sharpKey) {
+    const keyEl = keyElFor(noteKey, sharpKey);
     if (!playing || paused) {
       if (keyEl) flashKey(keyEl, false);
       return;
@@ -936,38 +1024,9 @@
     const expected = timeline[expectedIndex];
     if (!expected) return;
 
-    if (expected.note === noteKey && (!sharpKey || expected.sharp === true)) {
-      expected.done = true;
-      if (keyEl) flashKey(keyEl, true);
-      const chip = chipRefs.get(expected);
-      if (chip) {
-        chip.classList.remove("hit"); void chip.offsetWidth; chip.classList.add("hit");
-      }
-      playPianoNote(noteFreq(noteKey, expected.oct, expected.sharp));
-      expectedIndex++;
-      updateHud();
-      if (expectedIndex >= timeline.length) {
-        if (chip) applyNoteClass(chip, expected);
-        setTimeout(finishSong, 250);
-      } else if (expectedIndex <= lines[activeLineIndex].endIdx) {
-        if (chip) applyNoteClass(chip, expected);
-        const nextChip = chipRefs.get(timeline[expectedIndex]);
-        if (nextChip) nextChip.classList.add("current");
-        positionPlayhead(false);
-        updateDueKey();
-      } else if (!lineTransitionPending) {
-        lineTransitionPending = true;
-        setTimeout(() => {
-          lineTransitionPending = false;
-          if (!playing) return;
-          let idx = lines.findIndex(ln => expectedIndex <= ln.endIdx);
-          if (idx === -1) idx = lines.length - 1;
-          activeLineIndex = idx;
-          renderActiveLine();
-          updateDueKey();
-        }, 320);
-      }
-    } else {
+    const rightNote = expected.note === noteKey && (!sharpKey || expected.sharp === true);
+    const rightChip = source !== "chip" || chipNoteRef === expected;
+    if (!rightNote || !rightChip) {
       mistakes++;
       updateHud();
       if (keyEl) flashKey(keyEl, false);
@@ -977,6 +1036,106 @@
         const clickedChip = chipRefs.get(chipNoteRef);
         if (clickedChip && clickedChip !== expectedChip) shakeChip(clickedChip);
       }
+      return;
+    }
+
+    if (expected.tap) {
+      if (keyEl) flashKey(keyEl, true);
+      playPianoNote(noteFreq(noteKey, expected.oct, expected.sharp));
+      completeNote(expected);
+      return;
+    }
+
+    if (hold) return;
+    if (keyEl) keyEl.classList.add("pressed");
+    hold = {
+      note: expected, key: keyEl, full: false,
+      need: expected.ms, t0: Date.now(),
+      tone: startSustain(noteFreq(noteKey, expected.oct, expected.sharp))
+    };
+    holdTick();
+  }
+
+  function holdTick() {
+    if (!hold) return;
+    const p = Math.min(1, (Date.now() - hold.t0) / hold.need);
+    hold.note.fill = p;
+    paintFill(hold.note);
+    if (p >= 1 && !hold.full) {
+      hold.full = true;
+      holdDoneChime(noteFreq(hold.note.note, hold.note.oct, hold.note.sharp));
+      const chip = chipRefs.get(hold.note);
+      if (chip) { chip.classList.remove("hit"); void chip.offsetWidth; chip.classList.add("hit"); }
+    }
+    hold.raf = requestAnimationFrame(holdTick);
+  }
+
+  function noteUp() {
+    if (!hold) return;
+    const h = hold;
+    hold = null;
+    cancelAnimationFrame(h.raf);
+    h.tone.stop();
+    if (h.key) h.key.classList.remove("pressed");
+    const p = Math.min(1, (Date.now() - h.t0) / h.need);
+    if (p >= HOLD_TOL) {
+      if (h.key) flashKey(h.key, true);
+      completeNote(h.note);
+    } else {
+      drainNote(h.note, p);
+    }
+  }
+
+  function cancelHold() {
+    if (!hold) return;
+    const h = hold;
+    hold = null;
+    cancelAnimationFrame(h.raf);
+    h.tone.stop();
+    if (h.key) h.key.classList.remove("pressed");
+    h.note.fill = 0;
+    paintFill(h.note);
+  }
+
+  // letting go too early is never a mistake - the water just runs back out
+  function drainNote(n, from) {
+    const t0 = Date.now();
+    (function step() {
+      const q = Math.min(1, (Date.now() - t0) / 280);
+      n.fill = from * (1 - q);
+      paintFill(n);
+      if (q < 1) requestAnimationFrame(step);
+    })();
+  }
+
+  function completeNote(expected) {
+    expected.done = true;
+    expected.fill = 1;
+    const chip = chipRefs.get(expected);
+    if (chip && expected.tap) { chip.classList.remove("hit"); void chip.offsetWidth; chip.classList.add("hit"); }
+    expectedIndex++;
+    updateHud();
+    if (expectedIndex >= timeline.length) {
+      if (chip) applyNoteClass(chip, expected);
+      setTimeout(finishSong, 250);
+    } else if (expectedIndex <= lines[activeLineIndex].endIdx) {
+      if (chip) applyNoteClass(chip, expected);
+      const nextNote = timeline[expectedIndex];
+      const nextChip = chipRefs.get(nextNote);
+      if (nextChip) applyNoteClass(nextChip, nextNote);
+      positionPlayhead(false);
+      updateDueKey();
+    } else if (!lineTransitionPending) {
+      lineTransitionPending = true;
+      setTimeout(() => {
+        lineTransitionPending = false;
+        if (!playing) return;
+        let idx = lines.findIndex(ln => expectedIndex <= ln.endIdx);
+        if (idx === -1) idx = lines.length - 1;
+        activeLineIndex = idx;
+        renderActiveLine();
+        updateDueKey();
+      }, 320);
     }
   }
   function flashKey(el, good) {
@@ -1004,6 +1163,8 @@
     } catch (e) {}
   }
   document.addEventListener("pointerdown", unlockAudio, { once: true });
+  // a small finger slides off the key it started on - catch the release wherever it lands
+  ["pointerup", "pointercancel"].forEach(t => document.addEventListener(t, noteUp));
 
   function playPianoNote(freq, velocity) {
     velocity = velocity || 1;
@@ -1056,6 +1217,38 @@
       scheduleTone();
     }
   }
+  // same voice as playPianoNote, but it holds instead of fading - used while a finger is down
+  function startSustain(freq) {
+    const ac = ensureAudioCtx();
+    const t0 = ac.currentTime + 0.02;
+    const master = ac.createGain();
+    master.gain.setValueAtTime(0, t0);
+    master.gain.linearRampToValueAtTime(0.30, t0 + 0.05);
+    master.connect(ac.destination);
+    const oscs = [];
+    [[1, 1], [2, 0.42], [3, 0.18], [4, 0.10], [6.01, 0.05]].forEach(p => {
+      const osc = ac.createOscillator(), g = ac.createGain();
+      osc.type = "sine"; osc.frequency.value = freq * p[0]; g.gain.value = p[1];
+      osc.connect(g).connect(master); osc.start(t0); oscs.push(osc);
+    });
+    return { stop() {
+      const n = ac.currentTime;
+      master.gain.cancelScheduledValues(n);
+      master.gain.setValueAtTime(master.gain.value, n);
+      master.gain.linearRampToValueAtTime(0.0001, n + 0.09);
+      oscs.forEach(o => { try { o.stop(n + 0.15); } catch (e) {} });
+    } };
+  }
+  function holdDoneChime(freq) {
+    const ac = ensureAudioCtx();
+    const t0 = ac.currentTime + 0.02, osc = ac.createOscillator(), g = ac.createGain();
+    osc.type = "sine"; osc.frequency.value = freq * 4;
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(0.15, t0 + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.5);
+    osc.connect(g).connect(ac.destination); osc.start(t0); osc.stop(t0 + 0.55);
+  }
+
   function finaleJingle() {
     ["do","mi","sol"].forEach((k, i) => setTimeout(() => playPianoNote(noteFreq(k) * 2, 0.8), i * 150));
   }
