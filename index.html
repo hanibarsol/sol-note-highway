@@ -171,6 +171,18 @@
     font-size: 11.5px; font-weight: 700; color: var(--ink); pointer-events: none;
   }
   .note-chip.hit { animation: chip-hit .5s ease; }
+  /* a finished hold glows outward instead of growing - the finger is still on it */
+  .note-chip.hold-full { box-shadow: 0 0 0 7px color-mix(in srgb, var(--good) 45%, transparent), var(--shadow); }
+  .note-chip.hold-full::after {
+    content: ""; position: absolute; inset: -3px; border-radius: 50%; pointer-events: none;
+    animation: hold-ring .55s ease-out; z-index: 2;
+  }
+  @keyframes hold-ring {
+    from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 55%, transparent); }
+    to { box-shadow: 0 0 0 18px color-mix(in srgb, var(--good) 0%, transparent); }
+  }
+  /* while it is being held, nothing about the circle moves */
+  .note-chip.holding { animation: none !important; }
   @keyframes chip-hit { 0% { transform: scale(1); } 35% { transform: scale(1.35); box-shadow: 0 0 0 10px color-mix(in srgb, var(--good) 35%, transparent); } 100% { transform: scale(1); } }
   .note-chip.current { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent-gold) 45%, transparent), var(--shadow); animation: chip-current 1s ease-in-out infinite; }
   @keyframes chip-current { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
@@ -182,7 +194,10 @@
     background: var(--staff-line); transform: translateY(-.5px);
   }
   .note-chip .chip-water { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
-  .note-chip *, .piano-key *, .black-key * { -webkit-user-drag: none; -webkit-touch-callout: none; }
+  .note-chip, .note-chip *, .piano-key, .piano-key *, .black-key, .black-key * {
+    -webkit-user-drag: none; user-drag: none; -webkit-touch-callout: none;
+  }
+  .staff-viewport, .note-row { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
   .note-chip svg, .note-chip img, button svg { pointer-events: none; }
   .note-chip img { position: relative; z-index: 1; }
   .note-chip.tap { width: 38px; height: 38px; margin: -19px 0 0 -19px; }
@@ -226,6 +241,13 @@
   }
   .btn:focus-visible { outline: 3px solid var(--accent-gold); outline-offset: 2px; }
   .btn:active { transform: scale(.96); }
+  .btn.attract { animation: btn-attract 1.9s ease-out infinite; }
+  @keyframes btn-attract {
+    0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent-teal) 60%, transparent),
+                     0 6px 16px color-mix(in srgb, var(--accent-teal) 45%, transparent); }
+    70%, 100% { box-shadow: 0 0 0 15px color-mix(in srgb, var(--accent-teal) 0%, transparent),
+                            0 6px 16px color-mix(in srgb, var(--accent-teal) 45%, transparent); }
+  }
   .btn-primary { background: var(--accent-teal); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--accent-teal) 45%, transparent); }
   .btn-ghost { background: transparent; color: var(--ink); border-color: var(--panel-border); }
   .btn-ghost.active { background: var(--accent-gold); color: #241F3D; border-color: transparent; }
@@ -390,7 +412,8 @@
   footer { margin-top: 26px; font-size: 12.5px; color: var(--ink-soft); line-height: 1.6; text-align: center; }
 
   @media (prefers-reduced-motion: reduce) {
-    .finale-emoji, .piano-key.due, .black-key.due, .note-chip, .note-chip.hit, .note-chip.current, .confetti-piece { animation: none !important; }
+    .finale-emoji, .piano-key.due, .black-key.due, .note-chip, .note-chip.hit, .note-chip.current, .confetti-piece,
+    .btn.attract, .note-chip.hold-full::after { animation: none !important; }
   }
   @media (max-width: 480px) {
     .pk-avatar { width: 30px; height: 30px; }
@@ -665,6 +688,7 @@
     els.songBankToggleLabel.textContent = song.name;
     els.btnPlay.disabled = false;
     els.btnListen.disabled = false;
+    els.btnPlay.classList.add("attract");
     stopPlayback();
     setSongBankOpen(false);
   }
@@ -885,6 +909,7 @@
 
   function startPlayback() {
     unlockAudio();
+    els.btnPlay.classList.remove("attract");
     const song = SONGS.find(s => s.id === selectedSongId);
     if (!song) return;
     stopListen();
@@ -989,6 +1014,8 @@
   }
 
   function handleResize() {
+    // rebuilding the chips under a resting finger makes them replay their entry animation
+    if (hold) return;
     if (activeLineIndex >= 0 && lines[activeLineIndex]) renderActiveLine();
   }
 
@@ -1046,6 +1073,8 @@
 
     if (hold) return;
     if (keyEl) keyEl.classList.add("pressed");
+    const heldChip = chipRefs.get(expected);
+    if (heldChip) heldChip.classList.add("holding");
     hold = {
       note: expected, key: keyEl, full: false,
       need: expected.ms, t0: Date.now(),
@@ -1063,7 +1092,7 @@
       hold.full = true;
       holdDoneChime(noteFreq(hold.note.note, hold.note.oct, hold.note.sharp));
       const chip = chipRefs.get(hold.note);
-      if (chip) { chip.classList.remove("hit"); void chip.offsetWidth; chip.classList.add("hit"); }
+      if (chip) { chip.classList.remove("hold-full"); void chip.offsetWidth; chip.classList.add("hold-full"); }
     }
     hold.raf = requestAnimationFrame(holdTick);
   }
@@ -1074,6 +1103,8 @@
     hold = null;
     cancelAnimationFrame(h.raf);
     h.tone.stop();
+    const heldChip = chipRefs.get(h.note);
+    if (heldChip) { heldChip.classList.remove("holding"); heldChip.classList.remove("hold-full"); }
     if (h.key) h.key.classList.remove("pressed");
     const p = Math.min(1, (Date.now() - h.t0) / h.need);
     if (p >= HOLD_TOL) {
@@ -1090,6 +1121,8 @@
     hold = null;
     cancelAnimationFrame(h.raf);
     h.tone.stop();
+    const heldChip = chipRefs.get(h.note);
+    if (heldChip) { heldChip.classList.remove("holding"); heldChip.classList.remove("hold-full"); }
     if (h.key) h.key.classList.remove("pressed");
     h.note.fill = 0;
     paintFill(h.note);
