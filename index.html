@@ -146,7 +146,7 @@
     padding: 6px 12px; font-size: 13.5px; color: var(--ink-soft); box-shadow: var(--shadow); }
   .hud-right { font-variant-numeric: tabular-nums; display: flex; gap: 14px; }
   .hud-right span b { color: var(--good); font-size: 16px; }
-  .staff-viewport { position: relative; height: 248px; border-radius: var(--radius-lg); overflow: hidden; background: var(--paper-2); }
+  .staff-viewport { position: relative; height: 268px; border-radius: var(--radius-lg); overflow: hidden; background: var(--paper-2); }
   .staff-line-mark { position: absolute; right: 16px; left: 16px; height: 1px; background: var(--staff-line); }
   .note-row { position: absolute; inset: 0; }
   .note-chip {
@@ -208,6 +208,17 @@
   .rhythm-dot.done { opacity: .5; }
   .rhythm-dot.current { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent-gold) 60%, transparent)); }
   .rhythm-stem { position: absolute; width: 1px; background: var(--staff-line); opacity: .4; transform: translateX(-50%); pointer-events: none; }
+  /* the first note of the next line, so a finger can already be on its way */
+  /* which note opens the next line, so a finger can already be on its way */
+  .next-peek { display: inline-flex; align-items: center; gap: 6px; margin-inline-start: 14px; }
+  .next-peek .next-label { font-size: 11.5px; font-weight: 700; color: var(--ink-soft); }
+  .next-peek .next-ring {
+    width: 26px; height: 26px; border-radius: 50%; overflow: hidden; flex: 0 0 auto;
+    border: 2px solid var(--ring); background: var(--panel);
+    display: flex; align-items: flex-end; justify-content: center;
+  }
+  .next-peek .next-ring img { width: 100%; height: 118%; object-fit: cover; object-position: center top; }
+  .next-peek .next-name { font-size: 12px; font-weight: 800; color: var(--ink); }
   .playhead {
     position: absolute; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; left: 0;
     background: var(--accent-gold); box-shadow: 0 0 12px color-mix(in srgb, var(--accent-gold) 70%, transparent);
@@ -424,6 +435,15 @@
   /* The Info button no longer sits in the flow, so the page needs its own
      top room to clear the two corner buttons on a phone. */
   @media (max-width: 640px) { .app { padding-top: 64px; } }
+  /* on a narrow phone the staff must not lose width - take it from the frames instead */
+  @media (max-width: 430px) {
+    .app { padding-left: 7px; padding-right: 7px; }
+    .panel { padding: 12px 8px; }
+    .stage-hud { inset: 8px 8px auto 8px; }
+    .hud-left, .hud-right { padding: 4px 8px; font-size: 12px; }
+    .hud-right { gap: 9px; }
+    .hud-right span b { font-size: 14px; }
+  }
 </style>
 
 <video id="charIntroPlayer" style="display:none" playsinline webkit-playsinline></video>
@@ -704,9 +724,9 @@
 
   const LINE_GAP = 15;
   const STEP = LINE_GAP / 2;
-  const STAFF_BOTTOM = 172;
+  const STAFF_BOTTOM = 186;
   const LINE_BEATS = 8;
-  const PAD_LEFT = 32, PAD_RIGHT = 32;
+  const PAD_LEFT = 28, PAD_RIGHT = 28;
   const CHIP_DIAMETER = 56;
   const CHIP_MIN_GAP = 8;
   const CHIP_TAP_DIAMETER = 38;
@@ -789,6 +809,16 @@
       d.className = "line-dot" + (i === activeLineIndex ? " active" : "");
       els.lineDots.appendChild(d);
     });
+    const nextLine = lines[activeLineIndex + 1];
+    if (!nextLine || !nextLine.notes.length) return;
+    const nx = nextLine.notes[0];
+    const peek = document.createElement("span");
+    peek.className = "next-peek";
+    peek.innerHTML =
+      '<span class="next-label">הבא</span>' +
+      '<span class="next-ring" style="--ring:' + ringVar(nx.note) + '"><img src="' + IMG_SRC[nx.note] + '" alt="" draggable="false"></span>' +
+      '<span class="next-name">' + NOTES[nx.note].name + "</span>";
+    els.lineDots.appendChild(peek);
   }
 
   const WAVE = "M-100,0 q25,-6 50,0 t50,0 t50,0 t50,0 t50,0 t50,0 V115 H-100 Z";
@@ -844,6 +874,14 @@
     return viewportWidth - PAD_LEFT - PAD_RIGHT;
   }
 
+  function laneTopPx() {
+    // the HUD floats over the top of the staff and grows to two rows on a phone
+    const hud = els.stagePanel.querySelector(".stage-hud");
+    if (!hud) return 40;
+    const gap = hud.getBoundingClientRect().bottom - els.staffViewport.getBoundingClientRect().top;
+    return Math.max(30, Math.min(88, gap + 28));
+  }
+
   function renderActiveLine() {
     els.noteRow.innerHTML = "";
     els.rhythmLane.innerHTML = "";
@@ -853,6 +891,9 @@
     const line = lines[activeLineIndex];
     if (!line) return;
     const usableWidth = usableWidthPx();
+    const laneY = laneTopPx();
+    const slots = Math.max(1, line.notes.length - 1);
+    line.notes.forEach((m, k) => { m.fracInLine = line.notes.length > 1 ? k / slots : 0.5; });
     line.notes.forEach(n => {
       const x = PAD_LEFT + n.fracInLine * usableWidth;
       const y = noteYFor(NOTES[n.note].step);
@@ -869,13 +910,13 @@
 
       const dot = makeLaneDot(n);
       const dotDia = laneDia(n);
-      dot.style.left = x + "px"; dot.style.top = "40px";
+      dot.style.left = x + "px"; dot.style.top = laneY + "px";
       els.rhythmLane.appendChild(dot);
       laneRefs.set(n, dot);
       const stem = document.createElement("div");
       stem.className = "rhythm-stem";
       stem.style.left = x + "px";
-      stem.style.top = (40 + dotDia / 2 + 3) + "px";
+      stem.style.top = (laneY + dotDia / 2 + 3) + "px";
       stem.style.height = "14px";
       els.rhythmLane.appendChild(stem);
       applyNoteClass(chip, n);
@@ -1166,7 +1207,7 @@
         activeLineIndex = idx;
         renderActiveLine();
         updateDueKey();
-      }, 320);
+      }, 130);
     }
   }
   function flashKey(el, good) {
