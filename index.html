@@ -76,6 +76,9 @@
   }
   button img, button span { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; pointer-events: none; }
   html, body { margin: 0; padding: 0; }
+  /* a resting finger was starting a text selection - the blue wash, and on iOS the
+     magnifier loupe that floats up over it. Nothing on this page is meant to be selected. */
+  html, body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
   body {
     background:
       radial-gradient(1200px 500px at 15% -10%, var(--paper-2), transparent),
@@ -209,16 +212,6 @@
   .rhythm-dot.current { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent-gold) 60%, transparent)); }
   .rhythm-stem { position: absolute; width: 1px; background: var(--staff-line); opacity: .4; transform: translateX(-50%); pointer-events: none; }
   /* the first note of the next line, so a finger can already be on its way */
-  /* which note opens the next line, so a finger can already be on its way */
-  .next-peek { display: inline-flex; align-items: center; gap: 6px; margin-inline-start: 14px; }
-  .next-peek .next-label { font-size: 11.5px; font-weight: 700; color: var(--ink-soft); }
-  .next-peek .next-ring {
-    width: 26px; height: 26px; border-radius: 50%; overflow: hidden; flex: 0 0 auto;
-    border: 2px solid var(--ring); background: var(--panel);
-    display: flex; align-items: flex-end; justify-content: center;
-  }
-  .next-peek .next-ring img { width: 100%; height: 118%; object-fit: cover; object-position: center top; }
-  .next-peek .next-name { font-size: 12px; font-weight: 800; color: var(--ink); }
   .playhead {
     position: absolute; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; left: 0;
     background: var(--accent-gold); box-shadow: 0 0 12px color-mix(in srgb, var(--accent-gold) 70%, transparent);
@@ -809,16 +802,6 @@
       d.className = "line-dot" + (i === activeLineIndex ? " active" : "");
       els.lineDots.appendChild(d);
     });
-    const nextLine = lines[activeLineIndex + 1];
-    if (!nextLine || !nextLine.notes.length) return;
-    const nx = nextLine.notes[0];
-    const peek = document.createElement("span");
-    peek.className = "next-peek";
-    peek.innerHTML =
-      '<span class="next-label">הבא</span>' +
-      '<span class="next-ring" style="--ring:' + ringVar(nx.note) + '"><img src="' + IMG_SRC[nx.note] + '" alt="" draggable="false"></span>' +
-      '<span class="next-name">' + NOTES[nx.note].name + "</span>";
-    els.lineDots.appendChild(peek);
   }
 
   const WAVE = "M-100,0 q25,-6 50,0 t50,0 t50,0 t50,0 t50,0 t50,0 V115 H-100 Z";
