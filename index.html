@@ -154,7 +154,8 @@
     border-radius: 50%; border: 3px solid var(--ring); overflow: hidden; background: var(--panel);
     cursor: pointer; padding: 0; display: flex; align-items: flex-end; justify-content: center;
     box-shadow: var(--shadow); transition: transform .15s ease, opacity .2s ease, filter .2s ease;
-    animation: chip-in .25s ease both; touch-action: manipulation;
+    animation: chip-in .25s ease both; touch-action: none;
+    -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
   }
   @keyframes chip-in { from { opacity: 0; transform: translateY(8px) scale(.85); } to { opacity: 1; transform: none; } }
   .sharp-badge {
@@ -181,6 +182,8 @@
     background: var(--staff-line); transform: translateY(-.5px);
   }
   .note-chip .chip-water { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+  .note-chip *, .piano-key *, .black-key * { -webkit-user-drag: none; -webkit-touch-callout: none; }
+  .note-chip svg, .note-chip img, button svg { pointer-events: none; }
   .note-chip img { position: relative; z-index: 1; }
   .note-chip.tap { width: 38px; height: 38px; margin: -19px 0 0 -19px; }
   .note-chip.tap .chip-label { font-size: 10.5px; margin-top: 3px; }
@@ -311,6 +314,7 @@
   }
   .black-key {
     position: absolute; top: 0; height: 100%; border-radius: 0 0 5px 5px; pointer-events: auto; cursor: pointer;
+    touch-action: none; -webkit-touch-callout: none;
     background: linear-gradient(180deg, #3d3733 0%, #211c19 65%, #0a0908 100%);
     box-shadow: 0 4px 6px rgba(0,0,0,.45), inset 0 -8px 10px rgba(255,255,255,.06);
     transition: filter .08s ease, transform .08s ease;
@@ -338,7 +342,7 @@
     box-shadow: var(--key-shadow);
     cursor: pointer; padding: 0 4px 10px; display: flex; flex-direction: column; align-items: center;
     justify-content: flex-end; gap: 6px; font-family: inherit; color: #2a2620; position: relative;
-    touch-action: manipulation; transition: transform .05s ease, box-shadow .05s ease, background .1s ease;
+    touch-action: none; -webkit-touch-callout: none; transition: transform .05s ease, box-shadow .05s ease, background .1s ease;
   }
   .piano-key:focus-visible { outline: 3px solid var(--accent-gold); outline-offset: -4px; z-index: 2; }
   .piano-key:active, .piano-key.pressed {
@@ -681,7 +685,7 @@
   const STEP = LINE_GAP / 2;
   const STAFF_BOTTOM = 172;
   const LINE_BEATS = 8;
-  const PAD_LEFT = 44, PAD_RIGHT = 44;
+  const PAD_LEFT = 32, PAD_RIGHT = 32;
   const CHIP_DIAMETER = 56;
   const CHIP_MIN_GAP = 8;
   const CHIP_TAP_DIAMETER = 38;
@@ -717,7 +721,7 @@
     const result = [];
     const usableWidth = usableWidthPx();
     const minSpacing = CHIP_TAP_DIAMETER + CHIP_MIN_GAP;
-    const maxNotesPerLine = Math.max(1, Math.floor(usableWidth / minSpacing));
+    const maxNotesPerLine = Math.max(1, Math.floor(usableWidth / minSpacing) + 1);
     let i = 0;
     while (i < tl.length) {
       let current = [], beatsAcc = 0, j = i;
@@ -727,21 +731,18 @@
         if (current.length > 0 && (wouldBeats > LINE_BEATS || current.length >= maxNotesPerLine)) break;
         current.push(n); beatsAcc = wouldBeats; j++;
       }
+      // spread the notes evenly - how long each one lasts is told by the size of its
+      // circle in the rhythm lane, not by the gap after it, so short notes stop crowding
       while (current.length > 1) {
-        const total = current.reduce((s, m) => s + m.beats, 0);
-        let acc = 0;
-        const fracs = current.map(m => { const f = (acc + m.beats / 2) / total; acc += m.beats; return f; });
-        let fits = true;
-        for (let k = 1; k < fracs.length; k++) {
-          const need = (chipDia(current[k - 1]) + chipDia(current[k])) / 2 + CHIP_MIN_GAP;
-          if ((fracs[k] - fracs[k - 1]) * usableWidth < need) { fits = false; break; }
+        const step = usableWidth / (current.length - 1);
+        let widest = 0;
+        for (let k = 1; k < current.length; k++) {
+          widest = Math.max(widest, (chipDia(current[k - 1]) + chipDia(current[k])) / 2 + CHIP_MIN_GAP);
         }
-        if (fits) break;
+        if (step >= widest) break;
         current.pop();
       }
-      const total = current.reduce((s, m) => s + m.beats, 0);
-      let acc = 0;
-      current.forEach(m => { m.fracInLine = total > 0 ? (acc + m.beats / 2) / total : 0; acc += m.beats; });
+      current.forEach((m, k) => { m.fracInLine = current.length > 1 ? k / (current.length - 1) : 0.5; });
       const endIdx = i + current.length - 1;
       result.push({ notes: current, startIdx: i, endIdx, isLast: endIdx === tl.length - 1 });
       i = endIdx + 1;
@@ -839,7 +840,7 @@
       chip.className = "note-chip" + (n.tap ? " tap" : "") + (NOTES[n.note].step <= -2 ? " ledger" : "");
       chip.style.setProperty("--ring", ringVar(n.note));
       chip.style.left = x + "px"; chip.style.top = y + "px";
-      chip.innerHTML = waterLayer(n) + '<img src="' + IMG_SRC[n.note] + '" alt=""><span class="chip-label">' + NOTES[n.note].name + "</span>";
+      chip.innerHTML = waterLayer(n) + '<img src="' + IMG_SRC[n.note] + '" alt="" draggable="false"><span class="chip-label">' + NOTES[n.note].name + "</span>";
       chip.addEventListener("pointerdown", (e) => { e.preventDefault(); noteDown(n.note, "chip", n); });
       applyNoteClass(chip, n);
       els.noteRow.appendChild(chip);
