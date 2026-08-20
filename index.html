@@ -151,6 +151,17 @@
   .hud-right span b { color: var(--good); font-size: 16px; }
   .staff-viewport { position: relative; height: 268px; border-radius: var(--radius-lg); overflow: hidden; background: var(--paper-2); }
   .staff-line-mark { position: absolute; right: 16px; left: 16px; height: 1px; background: var(--staff-line); }
+  .note-row, .rhythm-lane { will-change: transform; }
+  .note-row.glide, .rhythm-lane.glide { transition: transform .22s cubic-bezier(.22,.61,.36,1); }
+  /* the note whose turn it is always stands here, and the track moves instead */
+  .now-zone {
+    position: absolute; top: 8px; bottom: 8px; width: 70px; border-radius: 18px;
+    background: color-mix(in srgb, var(--accent-teal) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-teal) 24%, transparent);
+    transform: translateX(-50%); pointer-events: none; z-index: 0;
+  }
+  /* the track is one piece now - no pages to count, and no playhead to chase */
+  .line-dots, .playhead { display: none; }
   .note-row { position: absolute; inset: 0; }
   .note-chip {
     position: absolute; width: 56px; height: 56px; margin: -28px 0 0 -28px; top: 0; left: 0;
@@ -420,6 +431,7 @@
   @media (prefers-reduced-motion: reduce) {
     .finale-emoji, .piano-key.due, .black-key.due, .note-chip, .note-chip.hit, .note-chip.current, .confetti-piece,
     .btn.attract, .song-bank-toggle.attract, .note-chip.hold-full::after { animation: none !important; }
+    .note-row.glide, .rhythm-lane.glide { transition: none !important; }
   }
   @media (max-width: 480px) {
     .pk-avatar { width: 30px; height: 30px; }
@@ -483,6 +495,7 @@
           </div>
         </div>
         <div class="staff-viewport" id="staffViewport">
+          <div class="now-zone" id="nowZone"></div>
           <div class="rhythm-lane" id="rhythmLane"></div>
           <div class="note-row" id="noteRow"></div>
           <div class="playhead" id="playheadEl"></div>
@@ -598,7 +611,7 @@
    "countdownOverlay","countdownNum","finaleOverlay","finaleStars","finaleStats","btnPlayAgain","btnCloseFinale",
    "btnPlay","btnListen","btnPause","btnRestart","keyboardRow","pianoBlacks",
    "btnInfo","videoModalBackdrop","videoModalClose","introVideo",
-   "songBankToggle","songBankToggleLabel","songBankScroll","songBankList","legendList","stagePanel","charIntroPlayer","rhythmLane"
+   "songBankToggle","songBankToggleLabel","songBankScroll","songBankList","legendList","stagePanel","charIntroPlayer","rhythmLane","nowZone"
   ].forEach(id => els[id] = document.getElementById(id));
 
   const AUDIO_SRC = {
@@ -721,8 +734,6 @@
   const LINE_GAP = 15;
   const STEP = LINE_GAP / 2;
   const STAFF_BOTTOM = 186;
-  const LINE_BEATS = 8;
-  const PAD_LEFT = 28, PAD_RIGHT = 28;
   const CHIP_DIAMETER = 56;
   const CHIP_MIN_GAP = 8;
   const CHIP_TAP_DIAMETER = 38;
@@ -730,16 +741,17 @@
   const TAP_MS = 400;
   // holding this share of the note counts as holding it all the way
   const HOLD_TOL = 0.90;
+  // one millisecond of music is worth this much track, so spacing shows length again
+  const PX_PER_MS = 0.10;
+  // where along the staff the note whose turn it is stands
+  const PLAYHEAD_FRAC = 0.28;
 
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   let timeline = [];
-  let lines = [];
-  let activeLineIndex = -1;
   let expectedIndex = -1;
   let playing = false, paused = false;
   let mistakes = 0;
-  let lineTransitionPending = false;
   const chipRefs = new Map();
   const sharpRefs = new Map();
   const laneRefs = new Map();
@@ -748,44 +760,30 @@
     const beatMs = 60000 / song.bpm;
     return song.notes.map(([note, beats, oct, sharp]) => {
       const ms = beats * beatMs;
-      return { note, beats, ms, tap: ms < TAP_MS, oct: oct || 0, sharp: !!sharp, done: false, fracInLine: 0 };
+      return { note, beats, ms, tap: ms < TAP_MS, oct: oct || 0, sharp: !!sharp, done: false };
     });
   }
   function chipDia(n) { return n.tap ? CHIP_TAP_DIAMETER : CHIP_DIAMETER; }
-  function laneDia(n) { return Math.round(Math.max(14, Math.min(40, 14 + (n.ms / 1000) * 22))); }
-
-  function buildLines(tl) {
-    const result = [];
-    const usableWidth = usableWidthPx();
-    const minSpacing = CHIP_TAP_DIAMETER + CHIP_MIN_GAP;
-    const maxNotesPerLine = Math.max(1, Math.floor(usableWidth / minSpacing) + 1);
-    let i = 0;
-    while (i < tl.length) {
-      let current = [], beatsAcc = 0, j = i;
-      while (j < tl.length) {
-        const n = tl[j];
-        const wouldBeats = beatsAcc + n.beats;
-        if (current.length > 0 && (wouldBeats > LINE_BEATS || current.length >= maxNotesPerLine)) break;
-        current.push(n); beatsAcc = wouldBeats; j++;
-      }
-      // spread the notes evenly - how long each one lasts is told by the size of its
-      // circle in the rhythm lane, not by the gap after it, so short notes stop crowding
-      while (current.length > 1) {
-        const step = usableWidth / (current.length - 1);
-        let widest = 0;
-        for (let k = 1; k < current.length; k++) {
-          widest = Math.max(widest, (chipDia(current[k - 1]) + chipDia(current[k])) / 2 + CHIP_MIN_GAP);
-        }
-        if (step >= widest) break;
-        current.pop();
-      }
-      current.forEach((m, k) => { m.fracInLine = current.length > 1 ? k / (current.length - 1) : 0.5; });
-      const endIdx = i + current.length - 1;
-      result.push({ notes: current, startIdx: i, endIdx, isLast: endIdx === tl.length - 1 });
-      i = endIdx + 1;
-    }
-    return result;
+  function playheadPx() { return Math.round(Math.max(200, els.staffViewport.clientWidth) * PLAYHEAD_FRAC); }
+  function layoutTimeline() {
+    let x = 0;
+    timeline.forEach((n, i) => {
+      n.x = x;
+      const next = timeline[i + 1];
+      const room = next ? (chipDia(n) + chipDia(next)) / 2 + CHIP_MIN_GAP + 4 : 0;
+      x += Math.max(room, n.ms * PX_PER_MS);
+    });
   }
+  function glide(instant) {
+    const target = timeline[expectedIndex] || timeline[timeline.length - 1];
+    if (!target) return;
+    const tx = "translateX(" + (playheadPx() - target.x) + "px)";
+    [els.noteRow, els.rhythmLane].forEach(el => {
+      el.classList.toggle("glide", !instant && !reducedMotion);
+      el.style.transform = tx;
+    });
+  }
+  function laneDia(n) { return Math.round(Math.max(14, Math.min(40, 14 + (n.ms / 1000) * 22))); }
 
   function noteYFor(step) { return STAFF_BOTTOM - step * STEP; }
 
@@ -798,14 +796,6 @@
     }
   }
 
-  function renderLineDots() {
-    els.lineDots.innerHTML = "";
-    lines.forEach((ln, i) => {
-      const d = document.createElement("span");
-      d.className = "line-dot" + (i === activeLineIndex ? " active" : "");
-      els.lineDots.appendChild(d);
-    });
-  }
 
   const WAVE = "M-100,0 q25,-6 50,0 t50,0 t50,0 t50,0 t50,0 t50,0 V115 H-100 Z";
   let waterUid = 0;
@@ -852,13 +842,11 @@
   }
 
   function showPlaceholder(text) {
+    els.noteRow.classList.remove("glide");
+    els.noteRow.style.transform = "none";
     els.noteRow.innerHTML = '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);font-size:14px;padding:0 24px;text-align:center;">' + text + "</div>";
   }
 
-  function usableWidthPx() {
-    const viewportWidth = Math.max(280, els.staffViewport.clientWidth);
-    return viewportWidth - PAD_LEFT - PAD_RIGHT;
-  }
 
   function laneTopPx() {
     // the HUD floats over the top of the staff and grows to two rows on a phone
@@ -874,14 +862,11 @@
     chipRefs.clear();
     sharpRefs.clear();
     laneRefs.clear();
-    const line = lines[activeLineIndex];
-    if (!line) return;
-    const usableWidth = usableWidthPx();
+    if (!timeline.length) return;
     const laneY = laneTopPx();
-    const slots = Math.max(1, line.notes.length - 1);
-    line.notes.forEach((m, k) => { m.fracInLine = line.notes.length > 1 ? k / slots : 0.5; });
-    line.notes.forEach(n => {
-      const x = PAD_LEFT + n.fracInLine * usableWidth;
+    els.nowZone.style.left = playheadPx() + "px";
+    timeline.forEach(n => {
+      const x = n.x;
       const y = noteYFor(NOTES[n.note].step);
       const chip = document.createElement("button");
       chip.type = "button";
@@ -915,23 +900,7 @@
         sharpRefs.set(n, badge);
       }
     });
-    renderLineDots();
-    positionPlayhead(true);
-  }
-
-  function positionPlayhead(instant) {
-    const target = timeline[expectedIndex];
-    if (!target) return;
-    const usableWidth = usableWidthPx();
-    const x = PAD_LEFT + target.fracInLine * usableWidth;
-    if (instant) {
-      els.playheadEl.style.transitionDuration = "0s";
-      els.playheadEl.style.left = x + "px";
-      void els.playheadEl.offsetWidth;
-      els.playheadEl.style.transitionDuration = "";
-    } else {
-      els.playheadEl.style.left = x + "px";
-    }
+    glide(true);
   }
 
   function startPlayback() {
@@ -941,11 +910,9 @@
     if (!song) return;
     stopListen();
     timeline = buildTimeline(song);
-    lines = buildLines(timeline);
-    activeLineIndex = 0;
+    layoutTimeline();
     expectedIndex = 0;
     mistakes = 0;
-    lineTransitionPending = false;
     updateHud();
     els.finaleOverlay.classList.add("hidden");
     els.btnListen.disabled = true;
@@ -1018,8 +985,10 @@
   }
   function stopPlayback() {
     cancelHold();
-    playing = false; paused = false; activeLineIndex = -1; expectedIndex = -1;
+    playing = false; paused = false; expectedIndex = -1;
     els.rhythmLane.innerHTML = "";
+    els.rhythmLane.classList.remove("glide");
+    els.rhythmLane.style.transform = "none";
     laneRefs.clear();
     els.btnPlay.disabled = !selectedSongId; els.btnListen.disabled = !selectedSongId; els.btnPause.disabled = true; els.btnRestart.disabled = true;
     els.btnPause.textContent = "⏸ השהיה";
@@ -1041,9 +1010,10 @@
   }
 
   function handleResize() {
-    // rebuilding the chips under a resting finger makes them replay their entry animation
-    if (hold) return;
-    if (activeLineIndex >= 0 && lines[activeLineIndex]) renderActiveLine();
+    if (hold || !playing || !timeline.length) return;
+    // note positions are measured in milliseconds, not in screen widths, so only "now" moves
+    els.nowZone.style.left = playheadPx() + "px";
+    glide(true);
   }
 
   function updateDueKey() {
@@ -1173,28 +1143,16 @@
     if (chip && expected.tap) { chip.classList.remove("hit"); void chip.offsetWidth; chip.classList.add("hit"); }
     expectedIndex++;
     updateHud();
+    if (chip) applyNoteClass(chip, expected);
     if (expectedIndex >= timeline.length) {
-      if (chip) applyNoteClass(chip, expected);
       setTimeout(finishSong, 250);
-    } else if (expectedIndex <= lines[activeLineIndex].endIdx) {
-      if (chip) applyNoteClass(chip, expected);
-      const nextNote = timeline[expectedIndex];
-      const nextChip = chipRefs.get(nextNote);
-      if (nextChip) applyNoteClass(nextChip, nextNote);
-      positionPlayhead(false);
-      updateDueKey();
-    } else if (!lineTransitionPending) {
-      lineTransitionPending = true;
-      setTimeout(() => {
-        lineTransitionPending = false;
-        if (!playing) return;
-        let idx = lines.findIndex(ln => expectedIndex <= ln.endIdx);
-        if (idx === -1) idx = lines.length - 1;
-        activeLineIndex = idx;
-        renderActiveLine();
-        updateDueKey();
-      }, 130);
+      return;
     }
+    const nextNote = timeline[expectedIndex];
+    const nextChip = chipRefs.get(nextNote);
+    if (nextChip) applyNoteClass(nextChip, nextNote);
+    glide(false);
+    updateDueKey();
   }
   function flashKey(el, good) {
     el.classList.add(good ? "correct" : "wrong");
