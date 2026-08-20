@@ -1046,7 +1046,10 @@
     const expected = timeline[expectedIndex];
     if (!expected) return;
 
-    const rightNote = expected.note === noteKey && (!sharpKey || expected.sharp === true);
+    // on the piano a sharp must come from a black key and a natural from a white one - the old test
+    // only caught one of those, so a white key answered for a sharp and still played the sharp back
+    const sharpMatches = source === "chip" ? true : (!!sharpKey === !!expected.sharp);
+    const rightNote = expected.note === noteKey && sharpMatches;
     const rightChip = source !== "chip" || chipNoteRef === expected;
     if (!rightNote || !rightChip) {
       mistakes++;
