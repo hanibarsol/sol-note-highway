@@ -395,6 +395,8 @@
     cursor: pointer; text-align: right;
   }
   .song-bank-toggle:focus-visible { outline: 3px solid var(--accent-gold); outline-offset: 2px; }
+  /* the pulse walks the path: bank, then play, then the notes themselves */
+  .song-bank-toggle.attract { border-color: var(--accent-teal); animation: btn-attract 1.9s ease-out infinite; }
   .song-bank-toggle .chev { color: var(--ink-soft); transition: transform .2s ease; }
   .song-bank-toggle.open .chev { transform: rotate(180deg); }
   .song-bank-scroll { max-height: 0; overflow: hidden; transition: max-height .25s ease; }
@@ -417,7 +419,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .finale-emoji, .piano-key.due, .black-key.due, .note-chip, .note-chip.hit, .note-chip.current, .confetti-piece,
-    .btn.attract, .note-chip.hold-full::after { animation: none !important; }
+    .btn.attract, .song-bank-toggle.attract, .note-chip.hold-full::after { animation: none !important; }
   }
   @media (max-width: 480px) {
     .pk-avatar { width: 30px; height: 30px; }
@@ -701,6 +703,7 @@
     els.songBankToggleLabel.textContent = song.name;
     els.btnPlay.disabled = false;
     els.btnListen.disabled = false;
+    els.songBankToggle.classList.remove("attract");
     els.btnPlay.classList.add("attract");
     stopPlayback();
     setSongBankOpen(false);
@@ -1355,6 +1358,7 @@
 
   new ResizeObserver(() => handleResize()).observe(els.stagePanel);
   window.addEventListener("resize", handleResize);
+  els.songBankToggle.classList.add("attract");
   renderStaffLines();
   showPlaceholder('בחרו שיר מהבנק ולחצו "נגן" כדי להתחיל');
 })();
